@@ -31,6 +31,22 @@ private func thpCarbonHotKeyHandler(
     guard incoming.id == monitor.carbonHotKeyID else { return OSStatus(eventNotHandledErr) }
 
     let kind = GetEventKind(eventRef)
+    if monitor.toggleMode {
+        if kind == UInt32(kEventHotKeyPressed) {
+            // Ignore key-repeat events: only toggle on the first press,
+            // then wait for release before accepting another press.
+            if !monitor.toggleAwaitingRelease {
+                monitor.toggleAwaitingRelease = true
+                monitor.toggleHeldState()
+            }
+            return noErr
+        }
+        if kind == UInt32(kEventHotKeyReleased) {
+            monitor.toggleAwaitingRelease = false
+            return noErr
+        }
+        return noErr
+    }
     if kind == UInt32(kEventHotKeyPressed) {
         monitor.transitionToHeldIfNeeded()
         return noErr
@@ -87,6 +103,8 @@ public final class PressAndHoldHotkeyMonitor {
     private let onPressed: @Sendable () -> Void
     private let onReleased: @Sendable () -> Void
     fileprivate let carbonHotKeyID: UInt32
+    public let toggleMode: Bool
+    fileprivate var toggleAwaitingRelease = false
 
     private let lock = NSLock()
     private var isHeld = false
@@ -95,6 +113,7 @@ public final class PressAndHoldHotkeyMonitor {
 #if canImport(AppKit)
     private var globalFlagsMonitor: Any?
     private var globalKeyMonitor: Any?
+    private var toggleStopMonitor: Any?
 #endif
     private var carbonHandler: EventHandlerRef?
     private var carbonHotKeyRef: EventHotKeyRef?
@@ -102,11 +121,13 @@ public final class PressAndHoldHotkeyMonitor {
     public init(
         hotkey: Hotkey = .functionKey,
         carbonHotKeyID: UInt32 = 1,
+        toggleMode: Bool = false,
         onPressed: @escaping @Sendable () -> Void,
         onReleased: @escaping @Sendable () -> Void
     ) {
         self.hotkey = hotkey
         self.carbonHotKeyID = carbonHotKeyID
+        self.toggleMode = toggleMode
         self.onPressed = onPressed
         self.onReleased = onReleased
     }
@@ -120,6 +141,7 @@ public final class PressAndHoldHotkeyMonitor {
 
         if shouldUseCarbonHotKey {
             try startCarbonHotKey()
+            if toggleMode { installToggleStopMonitor() }
             return
         }
 
@@ -178,6 +200,10 @@ public final class PressAndHoldHotkeyMonitor {
             NSEvent.removeMonitor(globalKeyMonitor)
         }
         globalKeyMonitor = nil
+        if let toggleStopMonitor {
+            NSEvent.removeMonitor(toggleStopMonitor)
+        }
+        toggleStopMonitor = nil
 #endif
 
         if let carbonHotKeyRef {
@@ -332,4 +358,32 @@ public final class PressAndHoldHotkeyMonitor {
         let onReleased = self.onReleased
         DispatchQueue.main.async(execute: onReleased)
     }
+
+    fileprivate func toggleHeldState() {
+        let wasHeld: Bool
+        lock.lock()
+        wasHeld = isHeld
+        isHeld = !wasHeld
+        lock.unlock()
+
+        if wasHeld {
+            let onReleased = self.onReleased
+            DispatchQueue.main.async(execute: onReleased)
+        } else {
+            let onPressed = self.onPressed
+            DispatchQueue.main.async(execute: onPressed)
+        }
+    }
+
+#if canImport(AppKit)
+    private func installToggleStopMonitor() {
+        toggleStopMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return }
+            // Only Escape (53) stops toggle recording; same hotkey also stops via Carbon handler
+            if event.keyCode == 53 {
+                self.transitionToReleasedIfNeeded()
+            }
+        }
+    }
+#endif
 }

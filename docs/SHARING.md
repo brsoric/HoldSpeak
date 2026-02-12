@@ -1,36 +1,39 @@
-# Sharing the app
+# Sharing HoldSpeak
 
-## Best way (recommended)
-
-If you want your friend to have the smoothest experience (no scary warnings, permissions stick across updates), distribute a **signed + notarized** build:
-
-- **Developer ID signed** app
-- **Notarized** DMG (or ZIP)
-
-This requires an Apple Developer account.
-
-## Friend-ready (works without Apple Developer account)
-
-You can share an unsigned/ad-hoc build, but your friend will see Gatekeeper prompts and needs to right‑click → Open.
-
-Use:
+## Quick Share (no Apple Developer account needed)
 
 ```bash
 ./scripts/package-for-friend.sh
 ```
 
-It generates:
+This generates `dist/HoldSpeak-friend.zip` containing:
+- `HoldSpeak.app` (with WhisperKit model if available)
+- `INSTALL.md` (setup guide)
 
-- `dist/HoldSpeak-friend.zip`
+Send the ZIP via AirDrop, iCloud Drive, Google Drive, or any file sharing service.
 
-Send that ZIP file to your friend (AirDrop, iCloud Drive, Google Drive/Dropbox, etc.).
+## What to Tell Your Friend
 
-If your friend gets stuck on Gatekeeper warnings, the most reliable first-run is:
+> "HoldSpeak is a speech-to-text app that runs in your menu bar. It transcribes locally on your Mac — no account or API key needed. Just install, grant 3 permissions (Mic, Input Monitoring, Accessibility), and hold Ctrl+Opt+Space to dictate."
 
-- Right‑click the app → **Open** → **Open**
+## Gatekeeper Workaround
 
-Optional (advanced): remove quarantine after moving to `/Applications`:
+Since the app is not notarized, your friend will see a Gatekeeper warning. The fix:
+
+1. Right-click `HoldSpeak.app` → **Open** → **Open**
+2. If that doesn't work: System Settings → Privacy & Security → scroll down → "Open Anyway"
+3. Nuclear option (Terminal): `xattr -dr com.apple.quarantine /Applications/HoldSpeak.app`
+
+## Recommended: Signed + Notarized Build
+
+For the smoothest experience (no Gatekeeper warnings, permissions persist across updates), use a Developer ID signed and notarized build:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/HoldSpeak.app
+SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/build-macos-app.sh
 ```
+
+Then notarize with `xcrun notarytool`.
+
+## Bundle Size
+
+The app bundle includes the WhisperKit model (~170 MB). Total ZIP is typically under 200 MB.

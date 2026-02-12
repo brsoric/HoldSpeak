@@ -1,39 +1,64 @@
 # HoldSpeak
 
-Hold a global hotkey, speak, release to transcribe, then paste into the currently focused text field (clipboard is restored after paste).
+A macOS menu bar app for speech-to-text. Hold a hotkey, speak, release — your words are transcribed locally and pasted into the focused text field.
 
-## Defaults (MVP)
+## Features
 
-- Hotkeys (global):
-  - Normal: hold `Control + Option + Space` → release → paste transcript
-  - Prompted: hold `Control + Option + Command + Space` → release → prompt + paste result
-- Behavior: record while held → transcribe on release → paste once
-- Default models:
-  - Transcription: `gpt-4o-mini-transcribe`
-  - Prompt: `gpt-4.1-nano`
+- **Local transcription** via [WhisperKit](https://github.com/argmaxinc/WhisperKit) — no audio leaves your machine
+- **AI rewriting** (optional) — rewrite/polish transcripts before pasting
+- **Dual AI provider support** — choose between OpenAI or Google Gemini
+- **Configurable hotkeys** — customize key combos in Settings
+- **Transcript history** — last 10 transcriptions stored locally
+- **Menu bar app** — lives in your menu bar, shows waveform while recording
 
-Your OpenAI API key is stored in the **macOS Keychain** on the machine where you configure it.
+## Default Hotkeys
 
-## Quick start (core package)
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl + Opt + Space` (hold) | Record → transcribe → paste raw transcript |
+| `Ctrl + Opt + Cmd + Space` (hold) | Record → transcribe → AI rewrite → paste result |
+
+Both hotkeys are customizable in Settings > Hotkeys.
+
+## AI Rewriting
+
+AI rewriting requires an API key from one of the supported providers:
+
+| Provider | Default Model | Key format |
+|----------|--------------|------------|
+| **OpenAI** | `gpt-4.1-nano` | `sk-...` |
+| **Gemini** | `gemini-2.0-flash` | `AIza...` |
+
+API keys are stored in the **macOS Keychain**. You can fetch available models from the API in Settings > AI Rewriting.
+
+Without an API key, the prompted hotkey pastes the raw transcript.
+
+## Required Permissions
+
+| Permission | Why |
+|------------|-----|
+| **Microphone** | Record audio for transcription |
+| **Accessibility** | Paste text into the focused app via simulated Cmd+V |
+| **Input Monitoring** | Detect global hotkeys |
+
+All three are requested on first use and can be managed in Settings > Permissions.
+
+## Build
 
 ```bash
 swift build
-swift run TranscribeHoldPasteCLI --help
-```
-
-## Build the macOS app bundle
-
-```bash
 ./scripts/build-macos-app.sh
 open ./build/HoldSpeak.app
 ```
 
-## Install to /Applications (recommended for permissions)
+## Install to /Applications
 
 ```bash
 ./scripts/install-to-applications.sh
 open /Applications/HoldSpeak.app
 ```
+
+Installing to `/Applications` helps macOS persist permissions across rebuilds.
 
 ## Package for a friend
 
@@ -41,22 +66,20 @@ open /Applications/HoldSpeak.app
 ./scripts/package-for-friend.sh
 ```
 
-This creates `dist/HoldSpeak-friend.zip`. Include `docs/FRIEND-INSTALL.md` (it’s also bundled as `INSTALL.md` in the zip).
+Creates `dist/HoldSpeak-friend.zip` with the app and install instructions.
 
-## Permissions (avoid re-granting every rebuild)
+## Permissions & Code Signing
 
-macOS stores Microphone / Accessibility / Input Monitoring permissions based on the app’s **bundle identifier + code signature**.
+macOS ties permissions to the app's **bundle identifier + code signature**. The build script uses ad-hoc signing by default, which may cause macOS to re-prompt after each rebuild.
 
-Right now `./scripts/build-macos-app.sh` uses **ad-hoc signing** by default, which often causes macOS to treat each rebuild as a “new app” and ask again.
+For stable permissions, use a real signing identity:
 
-For a production-like workflow:
+```bash
+SIGNING_IDENTITY="Developer ID Application: ..." ./scripts/build-macos-app.sh
+```
 
-1. Use a stable bundle id and a real signing identity:
-   - `BUNDLE_ID="com.yourcompany.TranscribeHoldPaste"`
-   - `SIGNING_IDENTITY="Apple Development: …"` (dev) or `Developer ID Application: …` (distribution)
-2. Install the signed app to `/Applications`:
-   - `./scripts/install-to-applications.sh`
+Bundle ID: `com.holdspeak.app`
 
 ## Sharing
 
-See `docs/SHARING.md`.
+See [docs/SHARING.md](docs/SHARING.md).

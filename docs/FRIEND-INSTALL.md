@@ -1,40 +1,42 @@
-# HoldSpeak (Friend Install)
+# HoldSpeak — Install Guide
 
-This app is a **menu bar** app. You provide your own OpenAI API key.
-
-Notes:
-- The API key is stored in the **macOS Keychain** on your Mac.
-- You are responsible for any OpenAI API costs on your account.
+HoldSpeak is a **menu bar** speech-to-text app for macOS. It runs 100% locally using WhisperKit — no API key needed for basic transcription.
 
 ## Install
 
 1. Unzip the download.
 2. Drag `HoldSpeak.app` into your `Applications` folder.
 3. First launch:
-   - Right‑click `HoldSpeak.app` → **Open** → **Open**
-   - (You may need to repeat this once depending on macOS Gatekeeper.)
+   - Right-click `HoldSpeak.app` → **Open** → **Open**
+   - (You may need to repeat this once due to macOS Gatekeeper.)
 
-## Configure
-
-1. Open the menu bar icon → **Settings…**
-2. Paste your OpenAI API key into Settings → **Save**
-3. Click **Enable hotkey** (the hotkeys only work when enabled)
-
-## Required macOS permissions
+## Grant Permissions
 
 System Settings → Privacy & Security:
 
-- **Microphone**: allow `HoldSpeak`
-- **Accessibility**: allow `HoldSpeak`
+| Permission | Why |
+|---|---|
+| **Microphone** | Record audio for transcription |
+| **Input Monitoring** | Detect global keyboard shortcuts |
+| **Accessibility** | Simulate Cmd+V to paste text |
 
-If something still doesn’t paste, quit and re-open the app after granting permissions.
+The app will prompt for each permission on first use. You can also grant them in Settings → Permissions tab.
 
 ## Use
 
-- Hold `Control + Option + Space` → speak → release → paste transcript
-- Hold `Control + Option + Command + Space` → speak → release → prompt + paste result
+- Hold **Ctrl + Opt + Space** → speak → release → pastes transcript
+- Hold **Ctrl + Opt + Cmd + Space** → speak → release → pastes AI-rewritten text (requires API key)
+
+## Optional: AI Rewriting
+
+To enable prompted mode (AI rewriting), open Settings → AI Rewriting and add an OpenAI API key. Without an API key, prompted mode will paste the raw transcript instead.
+
+- The API key is stored in the **macOS Keychain**.
+- You are responsible for any OpenAI API costs.
 
 ## Troubleshooting
 
-- If transcription fails, re-open Settings and confirm the API key is saved (and valid).
-- If paste fails, the app will copy the result to your clipboard; then you can paste manually.
+- **Model loading**: On first launch, the WhisperKit model takes a few seconds to load. Wait for the menu bar icon to stop pulsing.
+- **Paste fails**: The app copies to clipboard as fallback. Grant Accessibility permission and try again.
+- **Hotkey not working**: Ensure Input Monitoring is granted in System Settings.
+- **Gatekeeper blocks app**: Right-click → Open, or run: `xattr -dr com.apple.quarantine /Applications/HoldSpeak.app`
