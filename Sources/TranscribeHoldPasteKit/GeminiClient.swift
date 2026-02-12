@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.holdspeak.app", category: "GeminiClient")
 
 public struct GeminiClient: Sendable {
     public enum ClientError: Error, LocalizedError {
@@ -118,7 +121,7 @@ public struct GeminiClient: Sendable {
         } catch is ClientError {
             throw ClientError.decodeError
         } catch {
-            NSLog("[GeminiClient] JSON parse failed: %@", error.localizedDescription)
+            logger.error("JSON parse failed: \(error.localizedDescription, privacy: .public)")
             throw ClientError.decodeError
         }
     }

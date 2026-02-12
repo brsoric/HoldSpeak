@@ -40,14 +40,78 @@ struct AIRewritingTab: View {
 
     @ViewBuilder
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: HSLayout.gapSmall) {
-            Text("Optional — AI Rewriting")
-                .font(.hs_heading_sm)
-                .foregroundStyle(Color.hs_text_primary)
+        VStack(alignment: .leading, spacing: HSLayout.gapMedium) {
+            VStack(alignment: .leading, spacing: HSLayout.gapSmall) {
+                Text("Optional — AI Rewriting")
+                    .font(.hs_heading_sm)
+                    .foregroundStyle(Color.hs_text_primary)
 
-            Text("Transcription works fully offline. An API key enables the prompted mode (Ctrl+Opt+Cmd+Space) which rewrites your speech using AI.")
-                .font(.hs_body)
-                .foregroundStyle(Color.hs_text_secondary)
+                Text("Transcription works fully offline. An API key enables the prompted mode which rewrites your speech using AI.")
+                    .font(.hs_body)
+                    .foregroundStyle(Color.hs_text_secondary)
+            }
+
+            // How it works
+            VStack(alignment: .leading, spacing: HSSpace.sm.rawValue) {
+                Text("How it works")
+                    .font(.hs_label)
+                    .foregroundStyle(Color.hs_text_primary)
+
+                modeRow(
+                    icon: "waveform",
+                    title: "Rewrite mode",
+                    hotkey: appModel.hotkeyConfig.promptedDescription,
+                    description: "Speak freely — AI polishes your text before pasting"
+                )
+
+                modeRow(
+                    icon: "text.cursor",
+                    title: "Context mode",
+                    hotkey: "Select text + " + appModel.hotkeyConfig.promptedDescription,
+                    description: "Select text first, then speak an instruction (e.g. \"translate to English\", \"summarize\"). Result is copied to clipboard."
+                )
+            }
+            .padding(HSSpace.sm.rawValue)
+            .background(
+                RoundedRectangle(cornerRadius: HSRadius.md.rawValue)
+                    .fill(Color.hs_text_tertiary.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: HSRadius.md.rawValue)
+                    .stroke(Color.hs_border_subtle, lineWidth: 1)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func modeRow(icon: String, title: String, hotkey: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: HSSpace.sm.rawValue) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.hs_success)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: HSSpace.xs.rawValue) {
+                    Text(title)
+                        .font(.hs_caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(Color.hs_text_primary)
+
+                    Text(hotkey)
+                        .font(.hs_mono_sm)
+                        .foregroundStyle(Color.hs_text_tertiary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color.hs_text_tertiary.opacity(0.1))
+                        )
+                }
+
+                Text(description)
+                    .font(.hs_caption)
+                    .foregroundStyle(Color.hs_text_secondary)
+            }
         }
     }
 
@@ -80,20 +144,28 @@ struct AIRewritingTab: View {
                 .font(.hs_label)
                 .foregroundStyle(Color.hs_text_primary)
 
-            HStack {
-                if appModel.currentProviderKeyIsSet {
-                    Text("Saved in Keychain (length \(appModel.currentProviderKeyLength))")
+            // Connection status banner
+            HStack(spacing: HSSpace.sm.rawValue) {
+                Image(systemName: appModel.currentProviderKeyIsSet ? "checkmark.circle.fill" : "xmark.circle")
+                    .foregroundStyle(appModel.currentProviderKeyIsSet ? Color.hs_success : Color.hs_text_tertiary)
+                    .font(.system(size: 18))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(appModel.currentProviderKeyIsSet
+                        ? "\(appModel.aiProvider.displayName) connected"
+                        : "\(appModel.aiProvider.displayName) not connected")
+                        .font(.hs_label)
+                        .foregroundStyle(appModel.currentProviderKeyIsSet ? Color.hs_success : Color.hs_text_secondary)
+
+                    Text(appModel.currentProviderKeyIsSet
+                        ? "API key saved in Keychain — AI rewriting enabled"
+                        : "Add an API key to enable AI rewriting")
                         .font(.hs_caption)
-                        .foregroundStyle(Color.hs_success)
-                } else {
-                    Text("Not set — prompted mode will paste raw transcript")
-                        .font(.hs_caption)
-                        .foregroundStyle(Color.hs_warning)
+                        .foregroundStyle(Color.hs_text_tertiary)
                 }
+
                 Spacer()
-                HSButton(label: "Re-check", variant: .ghost, size: .sm) {
-                    appModel.refreshKeychainState()
-                }
+
                 if appModel.currentProviderKeyIsSet {
                     HSButton(label: "Clear", variant: .ghost, size: .sm) {
                         apiKeyInput = ""
@@ -101,6 +173,19 @@ struct AIRewritingTab: View {
                     }
                 }
             }
+            .padding(HSSpace.sm.rawValue)
+            .background(
+                RoundedRectangle(cornerRadius: HSRadius.md.rawValue)
+                    .fill(appModel.currentProviderKeyIsSet
+                        ? Color.hs_success.opacity(0.08)
+                        : Color.hs_text_tertiary.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: HSRadius.md.rawValue)
+                    .stroke(appModel.currentProviderKeyIsSet
+                        ? Color.hs_success.opacity(0.3)
+                        : Color.hs_border_subtle, lineWidth: 1)
+            )
 
             VStack(alignment: .leading, spacing: HSSpace.xxs.rawValue) {
                 Text("New API key (leave blank to keep existing)")
