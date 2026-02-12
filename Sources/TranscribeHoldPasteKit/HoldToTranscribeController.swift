@@ -22,7 +22,7 @@ public final class HoldToTranscribeController: @unchecked Sendable {
             language: String? = nil,
             translationLanguage: String? = nil,
             restoreClipboardDelaySeconds: TimeInterval = 0.3,
-            promptModel: String = "gpt-4.1-nano",
+            promptModel: String = "gpt-4o-mini",
             promptTemplate: String = "Rewrite the text to be clear and concise. Keep the meaning. Output only the rewritten text.",
             maxRecordingSeconds: TimeInterval = 600
         ) {
@@ -79,6 +79,7 @@ public final class HoldToTranscribeController: @unchecked Sendable {
     private var _resultHandler: (@Sendable (Result) -> Void)?
     private var _pendingBehavior: Behavior = .pasteTranscript
     private var _maxDurationStop: DispatchWorkItem?
+    private var _capturedContext: String?
 
     private var transcriptionTask: Task<Void, Never>? {
         get { lock.lock(); defer { lock.unlock() }; return _transcriptionTask }
@@ -99,6 +100,10 @@ public final class HoldToTranscribeController: @unchecked Sendable {
     private var maxDurationStop: DispatchWorkItem? {
         get { lock.lock(); defer { lock.unlock() }; return _maxDurationStop }
         set { lock.lock(); defer { lock.unlock() }; _maxDurationStop = newValue }
+    }
+    private var capturedContext: String? {
+        get { lock.lock(); defer { lock.unlock() }; return _capturedContext }
+        set { lock.lock(); defer { lock.unlock() }; _capturedContext = newValue }
     }
 
     public init(
@@ -137,6 +142,20 @@ public final class HoldToTranscribeController: @unchecked Sendable {
         transcriptionTask?.cancel()
         maxDurationStop?.cancel()
         pendingBehavior = behavior
+
+        // Capture selected text if this is AI rewrite mode
+        if behavior == .pastePrompted {
+            // Call synchronously - AX APIs are thread-safe
+            let captured = TextSelectionCapture.captureSelectedText()
+            capturedContext = captured
+            if let ctx = captured {
+                print("✅ Context captured: \"\(ctx.prefix(100))...\" (\(ctx.count) chars)")
+            } else {
+                print("ℹ️ No context captured (no selection or capture failed)")
+            }
+        } else {
+            capturedContext = nil
+        }
 
         do {
             try recorder.start()
@@ -224,31 +243,84 @@ public final class HoldToTranscribeController: @unchecked Sendable {
                 }
 
                 let finalText: String
+                var usedContext = false
                 switch behavior {
                 case .pasteTranscript:
                     finalText = text
                 case .pastePrompted:
                     if let promptService, promptService.isAvailable {
-                        finalText = try await promptService.transform(text: text, prompt: promptTemplate)
+                        // Check if we captured selected text as context
+                        let context = capturedContext
+                        capturedContext = nil // Reset immediately after reading
+
+                        let (inputText, systemPrompt): (String, String)
+                        if let context = context, !context.isEmpty {
+                            // Context mode: user instruction + selected text
+                            usedContext = true
+                            print("🎯 Using CONTEXT MODE")
+                            print("📝 Selected text: \"\(context.prefix(50))...\"")
+                            print("🗣️ User instruction: \"\(text)\"")
+
+                            systemPrompt = """
+                            You are an AI editing assistant. The user has selected text and spoken an instruction.
+                            Apply the instruction to the selected text and output only the result.
+                            """
+                            inputText = """
+                            SELECTED TEXT:
+                            \(context)
+
+                            USER INSTRUCTION:
+                            \(text)
+                            """
+                        } else {
+                            // Original mode: rewrite the transcription
+                            print("📄 Using ORIGINAL MODE (no context)")
+                            print("🗣️ Transcription: \"\(text)\"")
+
+                            systemPrompt = promptTemplate
+                            inputText = text
+                        }
+
+                        finalText = try await promptService.transform(text: inputText, prompt: systemPrompt)
                     } else {
                         finalText = text
                         stateHandler?(.failed(message: "Set API key in Settings for AI rewriting"))
                     }
                 }
 
+                // Smart paste behavior: copy to clipboard if context was used (to avoid replacing selected text)
                 do {
-                    try inserter.insertByPasting(text: finalText, restoreAfter: restoreDelay)
-                    stateHandler?(.idle)
-                    resultHandler?(
-                        Result(
-                            behavior: behavior,
-                            transcript: text,
-                            finalText: finalText,
-                            didPaste: true,
-                            didCopyToClipboard: false,
-                            errorMessage: nil
+                    if usedContext {
+                        // Context mode: Copy to clipboard to avoid replacing the selected text
+                        print("📋 Copying to clipboard (context mode - won't replace selection)")
+                        try inserter.copyToClipboard(text: finalText)
+                        stateHandler?(.idle)
+                        resultHandler?(
+                            Result(
+                                behavior: behavior,
+                                transcript: text,
+                                finalText: finalText,
+                                didPaste: false,
+                                didCopyToClipboard: true,
+                                errorMessage: nil
+                            )
                         )
-                    )
+                        stateHandler?(.failed(message: "Result copied to clipboard. Paste where you want (⌘V)"))
+                    } else {
+                        // Normal mode: Paste as usual
+                        try inserter.insertByPasting(text: finalText, restoreAfter: restoreDelay)
+                        stateHandler?(.idle)
+                        resultHandler?(
+                            Result(
+                                behavior: behavior,
+                                transcript: text,
+                                finalText: finalText,
+                                didPaste: true,
+                                didCopyToClipboard: false,
+                                errorMessage: nil
+                            )
+                        )
+                    }
                 } catch {
                     // Fallback: at least put the result on the clipboard.
                     try? inserter.copyToClipboard(text: finalText)

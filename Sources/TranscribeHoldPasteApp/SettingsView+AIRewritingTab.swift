@@ -31,7 +31,7 @@ struct AIRewritingTab: View {
             if appModel.aiProvider == .gemini {
                 appModel.promptModelName = "gemini-2.0-flash"
             } else {
-                appModel.promptModelName = "gpt-4.1-nano"
+                appModel.promptModelName = "gpt-4o-mini"
             }
         }
     }
@@ -193,7 +193,17 @@ struct AIRewritingTab: View {
 
     private var defaultModels: [String] {
         switch appModel.aiProvider {
-        case .openai: return ["gpt-4.1-nano", "gpt-4.1-mini", "gpt-4o-mini"]
+        case .openai: return [
+            "gpt-4o-mini",           // Fast, cheap, good quality
+            "gpt-4o",                // GPT-4 Omni (multimodal, latest)
+            "gpt-4-turbo",           // GPT-4 Turbo
+            "gpt-4",                 // GPT-4
+            "gpt-3.5-turbo",         // GPT-3.5 Turbo (fastest, cheapest)
+            "o1-preview",            // O1 reasoning model (preview)
+            "o1-mini",               // O1 mini reasoning model
+            "gpt-4.1-nano",          // Custom/legacy
+            "gpt-4.1-mini"           // Custom/legacy
+        ]
         case .gemini: return ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash"]
         }
     }
@@ -201,7 +211,7 @@ struct AIRewritingTab: View {
     private var recommendedNote: String {
         switch appModel.aiProvider {
         case .openai:
-            return "Recommended: gpt-4.1-nano (fastest, cheapest), gpt-4.1-mini (better quality)"
+            return "Recommended: gpt-4o-mini (fast & cheap), gpt-4o (best quality), gpt-3.5-turbo (cheapest)"
         case .gemini:
             return "Recommended: gemini-2.0-flash (fast, free tier available), gemini-2.0-flash-lite (fastest)"
         }

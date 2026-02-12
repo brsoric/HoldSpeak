@@ -36,7 +36,7 @@ final class AppModel: ObservableObject {
     @Published var modelLoadError: String?
     @Published var geminiApiKeyIsSet: Bool = false
     @Published var geminiApiKeyLength: Int = 0
-    @Published var promptModelName: String = "gpt-4.1-nano"
+    @Published var promptModelName: String = "gpt-4o-mini"
     @Published var promptTemplate: String = "Rewrite the text to be clear and concise. Keep the meaning. Output only the rewritten text."
     @Published var preferredLanguage: String? = nil {
         didSet { autoRestartListeningIfNeeded() }
