@@ -1,5 +1,8 @@
 import CoreGraphics
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.holdspeak.app", category: "HotkeyConfig")
 
 public struct HotkeyConfig: Codable, Equatable, Sendable {
     public var transcriptKeyCode: UInt16
@@ -24,16 +27,24 @@ public struct HotkeyConfig: Codable, Equatable, Sendable {
     private static let userDefaultsKey = "hotkey_config_v1"
 
     public static func load() -> HotkeyConfig {
-        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey),
-              let config = try? JSONDecoder().decode(HotkeyConfig.self, from: data) else {
+        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey) else {
             return .default
         }
-        return config
+        do {
+            return try JSONDecoder().decode(HotkeyConfig.self, from: data)
+        } catch {
+            logger.error("Failed to decode hotkey config: \(error.localizedDescription, privacy: .public)")
+            return .default
+        }
     }
 
     public func save() {
-        guard let data = try? JSONEncoder().encode(self) else { return }
-        UserDefaults.standard.set(data, forKey: HotkeyConfig.userDefaultsKey)
+        do {
+            let data = try JSONEncoder().encode(self)
+            UserDefaults.standard.set(data, forKey: HotkeyConfig.userDefaultsKey)
+        } catch {
+            logger.error("Failed to encode hotkey config: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     public var transcriptDescription: String {

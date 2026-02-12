@@ -1,6 +1,9 @@
 import AppKit
 import Foundation
+import os
 import TranscribeHoldPasteKit
+
+private let logger = Logger(subsystem: "com.holdspeak.app", category: "AppModel")
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -580,7 +583,7 @@ final class AppModel: ObservableObject {
         do {
             transcriptHistory = try JSONDecoder().decode([TranscriptHistoryItem].self, from: data)
         } catch {
-            NSLog("[HoldSpeak] Failed to decode history: %@", error.localizedDescription)
+            logger.error("Failed to decode history: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -589,7 +592,7 @@ final class AppModel: ObservableObject {
             let data = try JSONEncoder().encode(transcriptHistory)
             UserDefaults.standard.set(data, forKey: Keys.history)
         } catch {
-            NSLog("[HoldSpeak] Failed to encode history: %@", error.localizedDescription)
+            logger.error("Failed to encode history: \(error.localizedDescription, privacy: .public)")
         }
     }
 

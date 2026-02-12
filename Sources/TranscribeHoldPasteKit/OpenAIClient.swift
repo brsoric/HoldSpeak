@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.holdspeak.app", category: "OpenAIClient")
 
 public struct OpenAIClient: Sendable {
     public enum ClientError: Error {
@@ -106,7 +109,7 @@ public struct OpenAIClient: Sendable {
         } catch is ClientError {
             throw ClientError.decodeError
         } catch {
-            NSLog("[OpenAIClient] JSON parse failed: %@", error.localizedDescription)
+            logger.error("JSON parse failed: \(error.localizedDescription, privacy: .public)")
             throw ClientError.decodeError
         }
     }

@@ -1,5 +1,10 @@
 import Foundation
+import os
 
+private let logger = Logger(subsystem: "com.holdspeak.app", category: "HoldToTranscribe")
+
+/// Controls the hold-to-record, release-to-transcribe flow.
+/// Thread-safe via NSLock protecting all mutable state.
 public final class HoldToTranscribeController: @unchecked Sendable {
     public enum State: Sendable, Equatable {
         case idle
@@ -149,9 +154,7 @@ public final class HoldToTranscribeController: @unchecked Sendable {
             let captured = TextSelectionCapture.captureSelectedText()
             capturedContext = captured
             if let ctx = captured {
-                print("✅ Context captured: \"\(ctx.prefix(100))...\" (\(ctx.count) chars)")
-            } else {
-                print("ℹ️ No context captured (no selection or capture failed)")
+                logger.debug("Context captured: \(ctx.count, privacy: .public) chars")
             }
         } else {
             capturedContext = nil
@@ -257,9 +260,7 @@ public final class HoldToTranscribeController: @unchecked Sendable {
                         if let context = context, !context.isEmpty {
                             // Context mode: user instruction + selected text
                             usedContext = true
-                            print("🎯 Using CONTEXT MODE")
-                            print("📝 Selected text: \"\(context.prefix(50))...\"")
-                            print("🗣️ User instruction: \"\(text)\"")
+                            logger.debug("Context mode: \(context.count, privacy: .public) chars selected")
 
                             systemPrompt = """
                             You are an AI editing assistant. The user has selected text and spoken an instruction.
@@ -274,9 +275,6 @@ public final class HoldToTranscribeController: @unchecked Sendable {
                             """
                         } else {
                             // Original mode: rewrite the transcription
-                            print("📄 Using ORIGINAL MODE (no context)")
-                            print("🗣️ Transcription: \"\(text)\"")
-
                             systemPrompt = promptTemplate
                             inputText = text
                         }
@@ -292,7 +290,6 @@ public final class HoldToTranscribeController: @unchecked Sendable {
                 do {
                     if usedContext {
                         // Context mode: Copy to clipboard to avoid replacing the selected text
-                        print("📋 Copying to clipboard (context mode - won't replace selection)")
                         try inserter.copyToClipboard(text: finalText)
                         stateHandler?(.idle)
                         resultHandler?(

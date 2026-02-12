@@ -1,6 +1,9 @@
 import AVFoundation
 import AudioToolbox
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.holdspeak.app", category: "AudioRecorder")
 
 public final class AudioHoldRecorder {
     public enum RecorderError: Error {
@@ -40,7 +43,11 @@ public final class AudioHoldRecorder {
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
         ]
 
-        guard let recorder = try? AVAudioRecorder(url: url, settings: settings) else {
+        let recorder: AVAudioRecorder
+        do {
+            recorder = try AVAudioRecorder(url: url, settings: settings)
+        } catch {
+            logger.error("AVAudioRecorder init failed: \(error.localizedDescription, privacy: .public)")
             throw RecorderError.recorderInitFailed
         }
 

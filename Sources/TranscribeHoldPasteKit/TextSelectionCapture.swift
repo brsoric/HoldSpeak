@@ -1,7 +1,10 @@
 import Foundation
 import AppKit
 import Carbon.HIToolbox
+import os
 @preconcurrency import ApplicationServices
+
+private let logger = Logger(subsystem: "com.holdspeak.app", category: "TextSelection")
 
 /// Utility for capturing selected text from the focused application.
 /// Uses hybrid approach: AX APIs for native apps, clipboard fallback for web apps.
@@ -14,19 +17,19 @@ public enum TextSelectionCapture {
     public static func captureSelectedText(withFallback: Bool = true) -> String? {
         // Try AX API first (fast path for native apps)
         if let text = captureViaAccessibilityAPI() {
-            print("✅ Context captured via AX API")
+            logger.debug("Captured via AX API")
             return text
         }
 
         // Fallback to clipboard method (works in web apps)
         if withFallback {
             if let text = captureViaClipboard() {
-                print("✅ Context captured via clipboard (fallback)")
+                logger.debug("Captured via clipboard fallback")
                 return text
             }
         }
 
-        print("ℹ️ No context captured (no selection or capture failed)")
+        logger.debug("No context captured")
         return nil
     }
 
@@ -54,9 +57,11 @@ public enum TextSelectionCapture {
         }
 
         // Try to get selected text attribute
+        // CFTypeRef from AXUIElementCopyAttributeValue is always bridgeable to AXUIElement
+        let axElement = element as! AXUIElement  // Safe: AX API guarantees this type
         var selectedText: CFTypeRef?
         let textResult = AXUIElementCopyAttributeValue(
-            element as! AXUIElement,
+            axElement,
             kAXSelectedTextAttribute as CFString,
             &selectedText
         )
@@ -109,7 +114,9 @@ public enum TextSelectionCapture {
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
 
-        // 3. Wait for system to process copy (100ms is safe for web apps)
+        // 3. Wait for system to process the synthetic Cmd+C keystroke.
+        // Thread.sleep is intentional: this is a synchronous fallback path (AX API is tried first),
+        // 100ms is the minimum reliable delay for clipboard to update across all app types.
         Thread.sleep(forTimeInterval: 0.1)
 
         // 4. Read clipboard
