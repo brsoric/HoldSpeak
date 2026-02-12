@@ -52,20 +52,22 @@ public final class ClipboardInserter {
     public func insertByPasting(text: String, restoreAfter delaySeconds: TimeInterval = 0.3) throws {
         let snapshot = snapshot()
         let pasteboardName = pasteboard.name.rawValue
+        var didScheduleRestore = false
+
+        defer {
+            if !didScheduleRestore {
+                restore(snapshot)
+            }
+        }
 
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else {
-            restore(snapshot)
             throw InsertError.cannotSetPasteboard
         }
 
-        do {
-            try postCommandV()
-        } catch {
-            restore(snapshot)
-            throw error
-        }
+        try postCommandV()
 
+        didScheduleRestore = true
         DispatchQueue.main.asyncAfter(deadline: .now() + delaySeconds) {
             let pb = NSPasteboard(name: .init(pasteboardName))
             let inserter = ClipboardInserter(pasteboard: pb)

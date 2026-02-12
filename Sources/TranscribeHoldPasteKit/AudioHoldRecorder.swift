@@ -13,8 +13,16 @@ public final class AudioHoldRecorder {
 
     private var recorder: AVAudioRecorder?
     private var currentURL: URL?
+    private var meterTimer: Timer?
+
+    public var amplitudeHandler: ((Float) -> Void)?
 
     public init() {}
+
+    deinit {
+        stopMeterPolling()
+        recorder?.stop()
+    }
 
     public var isRecording: Bool { recorder?.isRecording ?? false }
 
@@ -36,7 +44,7 @@ public final class AudioHoldRecorder {
             throw RecorderError.recorderInitFailed
         }
 
-        recorder.isMeteringEnabled = false
+        recorder.isMeteringEnabled = true
 
         guard recorder.record() else {
             throw RecorderError.startFailed
@@ -44,16 +52,35 @@ public final class AudioHoldRecorder {
 
         self.currentURL = url
         self.recorder = recorder
+        startMeterPolling()
     }
 
     public func stop() throws -> URL {
         guard let recorder else { throw RecorderError.notRecording }
         guard let url = currentURL else { throw RecorderError.stopFailed }
 
+        stopMeterPolling()
         recorder.stop()
         self.recorder = nil
         self.currentURL = nil
 
         return url
+    }
+
+    private func startMeterPolling() {
+        let interval: TimeInterval = 1.0 / 24.0
+        meterTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self, let recorder = self.recorder, recorder.isRecording else { return }
+            recorder.updateMeters()
+            let power = recorder.averagePower(forChannel: 0)
+            let normalized = max(0, min(1, (power + 50) / 50))
+            self.amplitudeHandler?(normalized)
+        }
+        RunLoop.main.add(meterTimer!, forMode: .common)
+    }
+
+    private func stopMeterPolling() {
+        meterTimer?.invalidate()
+        meterTimer = nil
     }
 }

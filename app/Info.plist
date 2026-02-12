@@ -7,7 +7,7 @@
   <key>CFBundleExecutable</key>
   <string>HoldSpeak</string>
   <key>CFBundleIdentifier</key>
-  <string>com.example.TranscribeHoldPaste</string>
+  <string>com.holdspeak.app</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleDisplayName</key>
@@ -26,5 +26,9 @@
   <true/>
   <key>NSMicrophoneUsageDescription</key>
   <string>Transcribe speech to text when you hold the hotkey.</string>
+  <key>NSAccessibilityUsageDescription</key>
+  <string>HoldSpeak needs Accessibility access to paste transcribed text into the focused application via simulated Cmd+V.</string>
+  <key>NSInputMonitoringUsageDescription</key>
+  <string>HoldSpeak needs Input Monitoring to detect the global hotkey for starting and stopping voice recording.</string>
 </dict>
 </plist>

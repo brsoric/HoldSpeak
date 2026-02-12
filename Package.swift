@@ -12,9 +12,15 @@ let package = Package(
         .executable(name: "TranscribeHoldPasteCLI", targets: ["TranscribeHoldPasteCLI"]),
         .executable(name: "TranscribeHoldPasteApp", targets: ["TranscribeHoldPasteApp"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
+    ],
     targets: [
         .target(
-            name: "TranscribeHoldPasteKit"
+            name: "TranscribeHoldPasteKit",
+            dependencies: [
+                .product(name: "WhisperKit", package: "WhisperKit"),
+            ]
         ),
         .executableTarget(
             name: "TranscribeHoldPasteCLI",

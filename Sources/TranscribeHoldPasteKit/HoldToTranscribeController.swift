@@ -11,6 +11,7 @@ public final class HoldToTranscribeController: @unchecked Sendable {
     public struct Config: Sendable {
         public var model: String
         public var language: String?
+        public var translationLanguage: String?
         public var restoreClipboardDelaySeconds: TimeInterval
         public var promptModel: String
         public var promptTemplate: String
@@ -19,13 +20,15 @@ public final class HoldToTranscribeController: @unchecked Sendable {
         public init(
             model: String = "gpt-4o-mini-transcribe",
             language: String? = nil,
+            translationLanguage: String? = nil,
             restoreClipboardDelaySeconds: TimeInterval = 0.3,
             promptModel: String = "gpt-4.1-nano",
             promptTemplate: String = "Rewrite the text to be clear and concise. Keep the meaning. Output only the rewritten text.",
-            maxRecordingSeconds: TimeInterval = 200
+            maxRecordingSeconds: TimeInterval = 600
         ) {
             self.model = model
             self.language = language
+            self.translationLanguage = translationLanguage
             self.restoreClipboardDelaySeconds = restoreClipboardDelaySeconds
             self.promptModel = promptModel
             self.promptTemplate = promptTemplate
@@ -64,34 +67,70 @@ public final class HoldToTranscribeController: @unchecked Sendable {
     }
 
     private let recorder: AudioHoldRecorder
-    private let client: OpenAIClient
+    private let transcriber: any TranscriptionService
+    private let promptService: (any PromptService)?
+    private let translationService: (any PromptService)?
     private let inserter: ClipboardInserter
     private let config: Config
 
-    private var transcriptionTask: Task<Void, Never>?
-    private var stateHandler: (@Sendable (State) -> Void)?
-    private var resultHandler: (@Sendable (Result) -> Void)?
-    private var pendingBehavior: Behavior = .pasteTranscript
-    private var maxDurationStop: DispatchWorkItem?
+    private let lock = NSLock()
+    private var _transcriptionTask: Task<Void, Never>?
+    private var _stateHandler: (@Sendable (State) -> Void)?
+    private var _resultHandler: (@Sendable (Result) -> Void)?
+    private var _pendingBehavior: Behavior = .pasteTranscript
+    private var _maxDurationStop: DispatchWorkItem?
+
+    private var transcriptionTask: Task<Void, Never>? {
+        get { lock.lock(); defer { lock.unlock() }; return _transcriptionTask }
+        set { lock.lock(); defer { lock.unlock() }; _transcriptionTask = newValue }
+    }
+    private var stateHandler: (@Sendable (State) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return _stateHandler }
+        set { lock.lock(); defer { lock.unlock() }; _stateHandler = newValue }
+    }
+    private var resultHandler: (@Sendable (Result) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return _resultHandler }
+        set { lock.lock(); defer { lock.unlock() }; _resultHandler = newValue }
+    }
+    private var pendingBehavior: Behavior {
+        get { lock.lock(); defer { lock.unlock() }; return _pendingBehavior }
+        set { lock.lock(); defer { lock.unlock() }; _pendingBehavior = newValue }
+    }
+    private var maxDurationStop: DispatchWorkItem? {
+        get { lock.lock(); defer { lock.unlock() }; return _maxDurationStop }
+        set { lock.lock(); defer { lock.unlock() }; _maxDurationStop = newValue }
+    }
 
     public init(
         recorder: AudioHoldRecorder = AudioHoldRecorder(),
-        client: OpenAIClient,
+        transcriber: any TranscriptionService,
+        promptService: (any PromptService)? = nil,
+        translationService: (any PromptService)? = nil,
         inserter: ClipboardInserter = ClipboardInserter(),
         config: Config = Config()
     ) {
         self.recorder = recorder
-        self.client = client
+        self.transcriber = transcriber
+        self.promptService = promptService
+        self.translationService = translationService
         self.inserter = inserter
         self.config = config
     }
 
     public func setStateHandler(_ handler: (@Sendable (State) -> Void)?) {
-        self.stateHandler = handler
+        lock.lock()
+        defer { lock.unlock() }
+        _stateHandler = handler
     }
 
     public func setResultHandler(_ handler: (@Sendable (Result) -> Void)?) {
-        self.resultHandler = handler
+        lock.lock()
+        defer { lock.unlock() }
+        _resultHandler = handler
+    }
+
+    public func setAmplitudeHandler(_ handler: ((Float) -> Void)?) {
+        recorder.amplitudeHandler = handler
     }
 
     public func handleHotkeyPressed(behavior: Behavior = .pasteTranscript) {
@@ -152,23 +191,49 @@ public final class HoldToTranscribeController: @unchecked Sendable {
 
         stateHandler?(.transcribing)
 
-        let model = config.model
         let language = config.language
+        let translationLanguage = config.translationLanguage
         let restoreDelay = config.restoreClipboardDelaySeconds
         let behavior = pendingBehavior
-        let promptModel = config.promptModel
         let promptTemplate = config.promptTemplate
+        let transcriber = self.transcriber
+        let promptService = self.promptService
+        let translationService = self.translationService
 
-        transcriptionTask = Task { [client, inserter, stateHandler, resultHandler] in
+        transcriptionTask = Task { [inserter, stateHandler, resultHandler] in
             do {
                 defer { try? FileManager.default.removeItem(at: fileURL) }
-                let text = try await client.transcribe(fileURL: fileURL, model: model, language: language)
+                // Use Whisper's built-in translate task for English; otherwise transcribe normally
+                let useWhisperTranslate = translationLanguage == "en"
+                var text = try await transcriber.transcribe(
+                    fileURL: fileURL,
+                    language: language,
+                    translateToEnglish: useWhisperTranslate
+                )
+
+                // For non-English translation targets, use AI service
+                if let targetLang = translationLanguage, targetLang != "en" {
+                    let svc = translationService ?? promptService
+                    if let svc, svc.isAvailable {
+                        let langName = Self.languageDisplayName(targetLang)
+                        let translatePrompt = "You are a professional translator. Translate the following text to \(langName). Preserve the original meaning and tone. Output ONLY the translated text, nothing else."
+                        text = try await svc.transform(text: text, prompt: translatePrompt)
+                    } else {
+                        stateHandler?(.failed(message: "Set API key in Settings for translation"))
+                    }
+                }
+
                 let finalText: String
                 switch behavior {
                 case .pasteTranscript:
                     finalText = text
                 case .pastePrompted:
-                    finalText = try await client.promptTransform(text: text, prompt: promptTemplate, model: promptModel)
+                    if let promptService, promptService.isAvailable {
+                        finalText = try await promptService.transform(text: text, prompt: promptTemplate)
+                    } else {
+                        finalText = text
+                        stateHandler?(.failed(message: "Set API key in Settings for AI rewriting"))
+                    }
                 }
 
                 do {
@@ -220,6 +285,20 @@ public final class HoldToTranscribeController: @unchecked Sendable {
                     )
                 )
             }
+        }
+    }
+
+    private static func languageDisplayName(_ code: String) -> String {
+        switch code {
+        case "en": return "English"
+        case "pt": return "Portuguese"
+        case "de": return "German"
+        case "lb": return "Luxembourgish"
+        case "ru": return "Russian"
+        case "uk": return "Ukrainian"
+        case "ja": return "Japanese"
+        case "zh": return "Chinese"
+        default: return code
         }
     }
 }

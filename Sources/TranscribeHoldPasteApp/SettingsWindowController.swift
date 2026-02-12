@@ -10,7 +10,7 @@ final class SettingsWindowController {
         let hosting = NSHostingView(rootView: view)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 680, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: HSLayout.settingsDefaultW, height: HSLayout.settingsDefaultH),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -20,7 +20,7 @@ final class SettingsWindowController {
         window.contentView = hosting
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("TranscribeHoldPaste.SettingsWindow")
-        window.minSize = NSSize(width: 640, height: 520)
+        window.minSize = NSSize(width: HSLayout.settingsMinW, height: HSLayout.settingsMinH)
 
         self.window = window
     }
@@ -28,5 +28,6 @@ final class SettingsWindowController {
     func show() {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 }

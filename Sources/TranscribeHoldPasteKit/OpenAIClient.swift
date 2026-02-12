@@ -10,51 +10,36 @@ public struct OpenAIClient: Sendable {
     public let apiKey: String
     public let baseURL: URL
 
-    public init(apiKey: String, baseURL: URL = URL(string: "https://api.openai.com")!) {
+    // swiftlint:disable:next force_unwrapping
+    public static let defaultBaseURL = URL(string: "https://api.openai.com")!
+
+    public init(apiKey: String, baseURL: URL = OpenAIClient.defaultBaseURL) {
         self.apiKey = apiKey
         self.baseURL = baseURL
     }
 
     public func transcribe(fileURL: URL, model: String, language: String? = nil) async throws -> String {
-        let url = baseURL.appendingPathComponent("v1/audio/transcriptions")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        var request = makeRequest(path: "v1/audio/transcriptions")
 
         let boundary = "Boundary-\(UUID().uuidString)"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        let body = try MultipartFormData(boundary: boundary)
+        request.httpBody = try MultipartFormData(boundary: boundary)
             .addText(name: "model", value: model)
             .addOptionalText(name: "language", value: language)
             .addFile(name: "file", fileURL: fileURL, filename: fileURL.lastPathComponent, mimeType: "audio/m4a")
             .finalize()
 
-        request.httpBody = body
+        let json = try await send(request)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
-
-        if !(200...299).contains(http.statusCode) {
-            let bodyText = String(data: data, encoding: .utf8)
-            throw ClientError.httpError(statusCode: http.statusCode, body: bodyText)
-        }
-
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ClientError.decodeError
-        }
         if let text = json["text"] as? String {
             return text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-
         throw ClientError.decodeError
     }
 
     public func promptTransform(text: String, prompt: String, model: String) async throws -> String {
-        let url = baseURL.appendingPathComponent("v1/responses")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        var request = makeRequest(path: "v1/responses")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let body: [String: Any] = [
@@ -64,9 +49,47 @@ public struct OpenAIClient: Sendable {
                 ["role": "user", "content": text],
             ],
         ]
-
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
 
+        let json = try await send(request)
+
+        if let outputText = OpenAIResponseTextExtractor.extract(from: json), !outputText.isEmpty {
+            return outputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        throw ClientError.decodeError
+    }
+
+    // MARK: - List Models
+
+    public func listModels() async throws -> [OpenAIModelInfo] {
+        let url = baseURL.appendingPathComponent("v1/models")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+        let json = try await send(request)
+
+        guard let data = json["data"] as? [[String: Any]] else {
+            throw ClientError.decodeError
+        }
+
+        return data.compactMap { dict -> OpenAIModelInfo? in
+            guard let id = dict["id"] as? String else { return nil }
+            return OpenAIModelInfo(id: id)
+        }.sorted { $0.id < $1.id }
+    }
+
+    // MARK: - Private Helpers
+
+    private func makeRequest(path: String) -> URLRequest {
+        let url = baseURL.appendingPathComponent(path)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    private func send(_ request: URLRequest) async throws -> [String: Any] {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
 
@@ -75,16 +98,22 @@ public struct OpenAIClient: Sendable {
             throw ClientError.httpError(statusCode: http.statusCode, body: bodyText)
         }
 
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        do {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw ClientError.decodeError
+            }
+            return json
+        } catch is ClientError {
+            throw ClientError.decodeError
+        } catch {
+            NSLog("[OpenAIClient] JSON parse failed: %@", error.localizedDescription)
             throw ClientError.decodeError
         }
-
-        if let outputText = OpenAIResponseTextExtractor.extract(from: json), !outputText.isEmpty {
-            return outputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        throw ClientError.decodeError
     }
+}
+
+public struct OpenAIModelInfo: Sendable {
+    public let id: String
 }
 
 private enum OpenAIResponseTextExtractor {
