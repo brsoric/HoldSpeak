@@ -13,7 +13,7 @@ RESOURCES_DIR="${CONTENTS}/Resources"
 #   BUNDLE_ID="com.holdspeak.app"
 #   SIGNING_IDENTITY="Apple Development: Your Name (TEAMID)"  (or "Developer ID Application: ...")
 BUNDLE_ID="${BUNDLE_ID:-com.holdspeak.app}"
-SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-HoldSpeak Dev}"
 WHISPER_MODEL="${WHISPER_MODEL:-openai_whisper-small}"
 
 mkdir -p "${BUILD_DIR}"
